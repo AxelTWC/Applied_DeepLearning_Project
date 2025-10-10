@@ -15,7 +15,7 @@ Tech:
 ```
 
 ## A Core Summary 
-Retrieval-Augmented Generation (RAG) - A framework that combines information retrieval (fetching relevant documents) with large language models (LLMs) — by introducing adaptive chunking which is a smarter way of splitting text into pieces for retrieval.
+Retrieval-Augmented Generation (RAG) - A framework that combines information retrieval (fetching relevant documents) with large language models (LLMs) by introducing adaptive chunking which is a smarter way of splitting text into pieces for retrieval.
 
 Adaptive chunking makes RAG systems more intelligent by tailoring how text is divided, leading to better retrieval quality, stronger context understanding, and higher fidelity AI responses.
 
