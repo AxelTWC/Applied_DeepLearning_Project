@@ -19,6 +19,8 @@ Retrieval-Augmented Generation (RAG) - A framework that combines information ret
 
 Adaptive chunking makes RAG systems more intelligent by tailoring how text is divided, leading to better retrieval quality, stronger context understanding, and higher fidelity AI responses.
 
+In this project , we will find ways to enhance this process leading to better accuracy for RAG-AC.
+
 ## Requirements of the Project
 1. Implement a Retrieval-Augmented Generation pipeline using fixed-size chunking strategy as
 baseline
