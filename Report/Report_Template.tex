@@ -1,0 +1,170 @@
+\documentclass{article}
+% if you need to pass options to natbib, use, e.g.:
+%     \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading neurips_2023
+\usepackage[final]{neurips}
+% to avoid loading the natbib package, add option nonatbib:
+%    \usepackage[nonatbib]{neurips}
+
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}         % colors
+
+
+\title{Project Title}
+
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to LaTeX to determine where to break the
+% lines. Using \AND forces a line break at that point. So, if LaTeX puts 3 of 4
+% authors names on the first line, and the last on the second line, try using
+% \AND instead of \And before the third author name.
+
+
+\author{%
+  Name\\
+  Department of ...\\
+  University of Toronto\\
+  \texttt{email} \\
+  % more authors
+  \And
+  Name\\
+  Department of ...\\
+  University of Toronto\\
+  \texttt{email} \\
+  % \AND
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+}
+
+\begin{document}
+
+
+\maketitle
+
+
+\begin{abstract}
+An abstract of the report.
+\end{abstract}
+
+\section*{Assentation of Teamwork}
+Here, you explain how each member in the group has contributed to the project. 
+
+\color{red}
+\fbox{\textbf{\textit{This is required only in the final report.}}}
+\color{black}
+
+
+\section{Introduction}
+Here, you explain briefly the target problem and motivation to solve it via Deep Learning.
+
+\section{Preliminaries and Problem Formulation}
+Here, you formulate the problem. Specify the ultimate goal. If there are some new concepts that you had to learn to understand this project, you could briefly explain them. 
+	
+\section{Solution via Deep Learning}
+Here, you explain how you solve it via Deep Learning. You need to specify the components of your problem, i.e., dataset, model and loss. Explain how you train your model and how you test it. Should you do validation, explain how you do that. Also, if you are using some other components, explain them briefly.
+
+	
+\color{red}
+\texttt{\# YOUR PROGRESS BRIEFING SHOULD INCLUDE UP TO THIS POINT \#\\
+\# Note that you do not need to make it perfect! It is enough to have major things included. You have the chance to revise all these sections in your complete report which will be submitted at the end of semester.}
+\color{black}
+
+
+\section{Implementation}
+You explain the details of your design, plot diagrams if needed and name the key components. You also name the algorithms you have used for each component and include pseudo-code if necessary. If an algorithm is new, you should briefly explain it. You may also name the specific modules and/or libraries you have used for implementation.
+	
+
+\section{Numerical Experiments}
+
+You explain the experiments you have conducted to check your implemented design. You must also specify all values and parameters you have considered in the simulation, plot the learning curves or show the test values in the form of tables. If you have a demo test, you could also present it here. Also, if you compare your implementation against a benchmark or a reference setting, you should explain what the benchmark is and specify how you got the results for the benchmark (it's all OK if you get the result for the benchmark from an already implemented code or copy it from a paper, you should just cite them).
+
+\subsection{Including Figures}
+
+
+\begin{figure}
+  \centering
+  \fbox{\rule[-.5cm]{0cm}{4cm} \rule[-.5cm]{4cm}{0cm}}
+  \caption{Sample figure caption.}
+\end{figure}
+
+
+
+\subsection{Including Tables}
+
+\begin{table}
+  \caption{Sample table title}
+  \label{sample-table}
+  \centering
+  \begin{tabular}{lll}
+    \toprule
+    \multicolumn{2}{c}{Part}                   \\
+    \cmidrule(r){1-2}
+    Architecture     & Result 1     & Result 2 \\
+    \midrule
+    CNN & 1\%  &1\%   \\
+    ResNet     &1\% &1\%      \\
+    LSTM     &1\%       &   \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Answer Research Questions}
+You may include answer to research questions here.
+	
+
+\section{Conclusions}
+You should shortly conclude what you learned during project. Also, if you have any idea for further improvement of the results or extension, you may mention it here.
+	
+	
+
+
+\section*{References}
+Include all references here. It’s important to have your references cited.
+\medskip
+{
+\small
+
+
+[1] Alexander, J.A.\ \& Mozer, M.C.\ (1995) Template-based algorithms for
+connectionist rule extraction. In G.\ Tesauro, D.S.\ Touretzky and T.K.\ Leen
+(eds.), {\it Advances in Neural Information Processing Systems 7},
+pp.\ 609--616. Cambridge, MA: MIT Press.
+
+
+[2] Bower, J.M.\ \& Beeman, D.\ (1995) {\it The Book of GENESIS: Exploring
+  Realistic Neural Models with the GEneral NEural SImulation System.}  New York:
+TELOS/Springer--Verlag.
+
+
+[3] Hasselmo, M.E., Schnell, E.\ \& Barkai, E.\ (1995) Dynamics of learning and
+recall at excitatory recurrent synapses and cholinergic modulation in rat
+hippocampal region CA3. {\it Journal of Neuroscience} {\bf 15}(7):5249-5262.
+}
+
+\section*{Appendix}
+Any descriptions about supplementary materials go here.
+
+
+\end{document}
