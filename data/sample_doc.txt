@@ -1,0 +1,11 @@
+Title: Small Sample Document
+
+This is a short sample document used to demonstrate the Retrieval-Augmented Generation (RAG)
+baseline. The goal is to split this text into chunks, index them, and then retrieve relevant
+pieces in response to a user query.
+
+The quick brown fox jumps over the lazy dog. This sentence contains every letter in the English
+alphabet and is often used as example text. The RAG baseline will not be perfect but will
+illustrate the flow: chunk -> embed -> index -> retrieve -> generate.
+
+End of sample document.
