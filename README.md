@@ -34,7 +34,7 @@ of each
 
 ## Baseline RAG implementation (added)
 
-I added a small baseline Retrieval-Augmented Generation (RAG) pipeline that uses a fixed-size
+Added a small baseline Retrieval-Augmented Generation (RAG) pipeline that uses a fixed-size
 chunking strategy to serve as a baseline for later adaptive chunking experiments. The baseline is
 minimal and designed to be easy to run locally.
 
