@@ -3,6 +3,7 @@ import numpy as np
 import os
 import sys
 from typing import Optional
+import torch
 
 
 def _torch_has_cuda() -> bool:
@@ -40,7 +41,12 @@ class EmbeddingModel:
 
         # resolve device early for logging; actual model will be created on _load
         if device == "auto":
-            self.device = "cuda" if _torch_has_cuda() else "cpu"
+            if torch.backends.cuda.is_built():
+                self.device = "cuda"
+            elif torch.backends.mps.is_built():
+                self.device = "mps"
+            else:
+                self.device = "cpu"
         else:
             self.device = device
 
@@ -68,8 +74,6 @@ class EmbeddingModel:
 
             # If user requested CUDA but VRAM is small, pick a smaller model automatically
             try:
-                import torch
-
                 if self.device == "cuda" and torch.cuda.is_available():
                     prop = torch.cuda.get_device_properties(0)
                     total_gb = prop.total_memory / (1024 ** 3)
@@ -90,10 +94,10 @@ class EmbeddingModel:
                 # Older API: construct then move to device if possible
                 self.model = SentenceTransformer(self.model_name)
                 try:
-                    import torch
-
                     if self.device == "cuda" and torch.cuda.is_available():
                         self.model.to("cuda")
+                    elif self.device == "mps" and torch.backends.mps.is_available():
+                        self.model.to("mps")
                     else:
                         self.model.to("cpu")
                 except Exception:
@@ -104,10 +108,6 @@ class EmbeddingModel:
             return
         except Exception as e:
             print(f"[EmbeddingModel] could not load sentence-transformers or model failed to initialize: {e}. Falling back to deterministic embeddings.")
-
-        # deterministic pseudo-embeddings fallback (no heavy deps)
-        self.model = None
-        self._loaded = True
 
         # deterministic pseudo-embeddings fallback (no heavy deps)
         self.model = None
