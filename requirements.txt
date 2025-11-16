@@ -3,3 +3,13 @@ scikit-learn
 sentence-transformers
 jupyter
 pytest
+langchain
+openai
+numpy
+pandas
+datasets
+tqdm
+langchain-community
+langchain-huggingface
+faiss-cpu
+pyserini
