@@ -65,3 +65,7 @@ Small GPU notes
   run on GPUs with limited VRAM (for example, RTX 3080 mobile with ~8GB). The demo defaults
   to deterministic fallback embeddings to avoid heavy memory use.
 
+---
+## Benchmark:
+<img width="1990" height="556" alt="image" src="https://github.com/user-attachments/assets/dbb93bd8-749a-48e2-9c1c-7adce262fb39" />
+
