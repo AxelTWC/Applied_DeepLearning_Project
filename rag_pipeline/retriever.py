@@ -176,8 +176,8 @@ class DPRRetriever(Retriever):
         count = len(retrieved_docs)
         idx = retrieved_docs[-1]['question_id'] if len(retrieved_docs) > 0 else 0
         with tqdm(desc="Preprocessing NaturalQuestions", total=preprocess_length) as pbar:
-            pbar.update(count)
-            while count < preprocess_length and idx < len(dataset):
+            pbar.update(len(retrieved_docs))
+            while len(retrieved_docs) < preprocess_length and idx < len(dataset):
                 question_ids = []
                 questions = []
                 answers = []
@@ -196,16 +196,16 @@ class DPRRetriever(Retriever):
                                 continue
                             answer_set.add(txt)
                             answer_list.append(txt)
-                    idx += 1
                     if len(answer_list) == 0:
                         if preprocess_length == len(dataset):
                             pbar.update(1)
+                        idx += 1
                         continue
                     question_ids.append(idx)
                     questions.append(dataset[idx]['question']['text'])
                     answers.append(answer_list)
-                    count += 1
-                    if count >= preprocess_length:
+                    idx += 1
+                    if len(retrieved_docs) + len(questions) >= preprocess_length:
                         break
                 batch_contexts = self.searcher.batch_search(questions, question_ids, k=top_k, threads=threads)
                 for question_id, question, answer in zip(question_ids, questions, answers):
@@ -230,5 +230,5 @@ class DPRRetriever(Retriever):
     
 if __name__ == "__main__":
     retriever = DPRRetriever()
-    # retriever.preprocess_triviaqa(filepath="../data/", top_k=20)
-    retriever.preprocess_nq(filepath="../data/", top_k=20, preprocess_length=18000 , split="train")
+    retriever.preprocess_triviaqa(filepath="../data/", top_k=20)
+    retriever.preprocess_nq(filepath="../data/", top_k=20 , split="validation")
