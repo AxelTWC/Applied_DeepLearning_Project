@@ -1,4 +1,5 @@
 data/source/*
+data/*_DPR.json
 faiss_store/*
 .DS_Store
 
