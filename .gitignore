@@ -27,3 +27,7 @@ wheels/
 data/preprocessed/*
 data/iterative/*
 data/rag_history/*
+data/adaptive*/
+wandb/
+env.py
+*.jsonl
