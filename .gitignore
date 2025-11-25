@@ -24,3 +24,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+
+data/preprocessed/*
+data/iterative/*
+data/rag_history/*
