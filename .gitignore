@@ -1,2 +1,4 @@
 data/source/*
 */__pycache__/*
+faiss_store/*
+.DS_Store
