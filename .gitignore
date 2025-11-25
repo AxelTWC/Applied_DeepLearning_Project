@@ -32,3 +32,4 @@ data/adaptive*/
 wandb/
 env.py
 *.jsonl
+out/
