@@ -79,7 +79,7 @@ class FassisLocalVectorStore:
         self.embedding_model_name = embedding_model
         # self.embedding_model = EmbeddingModel(model_name = embedding_model, device=device)
         if device == "auto":
-            if torch.backends.cuda.is_available():
+            if torch.cuda.is_available():
                 self.device = 'cuda'
             elif torch.backends.mps.is_available():
                 self.device = 'mps'
