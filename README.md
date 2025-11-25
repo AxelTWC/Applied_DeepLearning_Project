@@ -55,7 +55,38 @@ pip install -r requirements.txt
 python demo.py
 ```
 
+## Evaluation Result (Accuracy)
+
+Source: DPR
+
+| Benchmark         | Model                 | vanilla | RAG (Top 1)    |RAG (Top 3)     |RAG (Top 5)     |
+| :---------------: | :-------------------: | :-----: | :-----: | :-----: | :-----: |
+| TriviaQA_VAL_500  | Llama-3.1-8B-Instruct | 74.2%   | 66.4%       | 70.0%       | 68.4%       |
+| TriviaQA_VAL_1000 | Llama-3.1-8B-Instruct | 72.1%   | 61.4%       | 68.0%       | 68.1%       |
+| TriviaQA_VAL_2000 | Llama-3.1-8B-Instruct | 72.7%   | 66.5%       | 68.0%       | 67.7%       |
+| TriviaQA_VAL_1000 | Qwen-3-8B | 59.2% | 63.5% | 66.9% | 69.5% |
+| TriviaQA_VAL_1000 | Qwen-2.5-7B-Instruct |  54.1%  |    57.3%    |     62%     |      D      |
+|    NQ_VAL_1000    | Llama-3.1-8B-Instruct |  32.4%  |    39.6%    |    43.9%    |    44.7%    |
+| NQ_VAL_1000 | Qwen-3-8B |  25.2%  |    41.7%    |    46.6%    |    50.1%    |
+| NQ_VAL_1000 | Qwen-2.5-7B-Instruct  |  21.8%  |    37.9%    |    44.0%    | 44.9% |
+
+
+
+Context Confidence
+
+|  Benchmark   |   Method    | Score  |
+| :----------: | :---------: | :----: |
+| TriviaQA_VAL | DPR (Top 5) | 68.66% |
+|    NQ_VAL    | DPR (Top 5) | 66.24% |
+
+
+
+
+
+
+
 Notes:
+
 - The embedding wrapper will use deterministic pseudo-embeddings by default (safe).
 - The vector store uses NumPy-based cosine similarity. This keeps the baseline lightweight
   and avoids platform-specific wheel issues for Faiss.
