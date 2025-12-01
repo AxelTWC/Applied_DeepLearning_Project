@@ -41,9 +41,9 @@ class EmbeddingModel:
 
         # resolve device early for logging; actual model will be created on _load
         if device == "auto":
-            if torch.backends.cuda.is_built():
+            if torch.cuda.is_available():
                 self.device = "cuda"
-            elif torch.backends.mps.is_built():
+            elif torch.backends.mps.is_available():
                 self.device = "mps"
             else:
                 self.device = "cpu"
