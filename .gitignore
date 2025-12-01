@@ -2,3 +2,6 @@ data/source/*
 */__pycache__/*
 faiss_store/*
 .DS_Store
+data/preprocessed/*
+data/iterative/*
+data/rag_history/*
