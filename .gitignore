@@ -2,6 +2,9 @@ data/source/*
 data/*_DPR.json
 faiss_store/*
 .DS_Store
+data/preprocessed/*
+data/iterative/*
+data/rag_history/*
 
 # Python
 __pycache__/
@@ -24,7 +27,3 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
-data/preprocessed/*
-data/iterative/*
-data/rag_history/*
