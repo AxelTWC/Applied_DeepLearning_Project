@@ -1,32 +1,47 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 import time
 from typing import List, Dict, Union
+import torch
 
 class Generator:
     
     def __init__(self, model_name: str = "Qwen/Qwen2.5-7B-Instruct"):
         self.model_name = model_name
+        if torch.cuda.is_available():
+            self.device = "cuda"
+        elif torch.backends.mps.is_available():
+            self.device = "mps"
+        else:
+            self.device = "cpu"
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype="auto",
-            device_map="auto"
+            device_map=self.device
         )
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.system_prompt = "You are a helpful assistant."
 
-    def generate(self, messages: Union[str, List[Dict]]):
+    def generate(self, messages: Union[str, List[Dict]], temperature: float = 1.0, top_p: float = 0.9, top_k: int = 40, max_new_tokens: int = 512) -> str:
         if isinstance(messages, str):
-            text = messages
-        else:
-            text = self.tokenizer.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=True
-            )
-        model_inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": messages}
+            ]
+        text = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+        model_inputs = self.tokenizer([text], return_tensors="pt").to(self.device)
+        self.generation_config = GenerationConfig(
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            max_new_tokens=max_new_tokens,
+        )
         generated_ids = self.model.generate(
             **model_inputs,
-            max_new_tokens=512
+            generation_config=self.generation_config,
         )
         generated_ids = [
             output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
@@ -39,7 +54,8 @@ class Generator_API(Generator):
     Generator that uses an API endpoint for generation
     """
     def __init__(self, base_url: str = "http://localhost:8080"):
-        self.api_url = f"{base_url}/v1/chat/completions"
+        self.base_url = base_url
+        self.api_url = f"{self.base_url}/v1/chat/completions"
         self.system_prompt = "You are a helpful assistant."
     
     def generate(self, input_data: Union[str, List[Dict]]):
