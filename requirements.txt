@@ -9,8 +9,7 @@ numpy
 pandas
 datasets
 tqdm
-langchain-community
-langchain-huggingface
 faiss-cpu
 pyserini
 accelerate
+FlagEmbedding
