@@ -1,5 +1,6 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import time
+from typing import List, Dict, Union
 
 class Generator:
     
@@ -11,20 +12,17 @@ class Generator:
             device_map="auto"
         )
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.system_prompt = "You are a helpful assistant."
 
-    def generate(self, question: str, contexts: list[str]):
-        messages = [
-            {"role": "system", "content": """
-             You are a helpful assistant. You need to directly give the answer without any other text, and you will be provided with some reference information to help you answer the question. If The answer is not in the reference information, or the reference information is not enough to answer the question, you should use RAG to retrieve more context from konledge base, by <retriever>information you need</retriever> <context_num>number of context you need</context_num>.
-             for example, if the question is "What was Grace Darling's father's job?", and the reference information is "None", your response should be <retriever>what was Grace Darling's father's job?</retriever> <context_num>3</context_num>.
-             """},
-            {"role": "user", "content": f"Question: {question}\n\nReference Information: {"\n".join(contexts)}"}
-        ]
-        text = self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
+    def generate(self, messages: Union[str, List[Dict]]):
+        if isinstance(messages, str):
+            text = messages
+        else:
+            text = self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True
+            )
         model_inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
         generated_ids = self.model.generate(
             **model_inputs,
@@ -35,6 +33,40 @@ class Generator:
         ]
         response = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
         return response
+        
+class Generator_API(Generator):
+    """
+    Generator that uses an API endpoint for generation
+    """
+    def __init__(self, base_url: str = "http://localhost:8080"):
+        self.api_url = f"{base_url}/v1/chat/completions"
+        self.system_prompt = "You are a helpful assistant."
+    
+    def generate(self, input_data: Union[str, List[Dict]]):
+        import requests
+        import json
+        headers = {"Content-Type": "application/json"}
+        
+        if isinstance(input_data, list):
+            messages = input_data
+        else:
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": input_data}
+            ]
+
+        data = {
+            "messages": messages,
+            "temperature": 1.0,
+            "top_p": 0.9,
+            "top_k": 40,
+            "stream": False 
+        }
+        response = requests.post(self.api_url, headers=headers, data=json.dumps(data))
+        return response.json()["choices"][0]["message"]["content"]
+    
+    def set_system_prompt(self, prompt: str):
+        self.system_prompt = prompt
     
 if __name__ == "__main__":
     time_start = time.time()
