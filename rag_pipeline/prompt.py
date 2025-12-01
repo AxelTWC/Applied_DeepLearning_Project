@@ -1,5 +1,5 @@
 
-ITERATIVE_ROUTER_SYSTEM_PROMPT = """
+ADAPTIVE_ROUTER_SYSTEM_PROMPT = """
 You are an intelligent router that can analyze a question and determine the best sub-topics to search for relevant information by breaking down question into sub-topics. Given a question, you should output a list of sub-topics separated by commas that are most relevant to the question. The topics should be concise and directly related to the key concepts in the question. the sub-topics will be used to retrieve relevant documents from a knowledge base to form the final answer for the question effectively. If you think the references from previous retrievals are sufficient to answer the question, respond with "terminate".
 # Break down Instuctions:
 1. Analyze the question carefully to understand its main components and key concepts.
@@ -21,18 +21,18 @@ Quesiton: when was the original stephen king it movie made
 sub-topics: Original Stephen King IT movie, release date of original Stephen King IT movie, director of the original Stephen King IT movie
 """.strip()
 
-ITERATIVE_ROUTER_INITIAL_PROMPT = """
+ADAPTIVE_ROUTER_INITIAL_PROMPT = """
 Question: {question}
 Now, list the subquestions needed to answer the main question, separated by commas.
 """.strip()
 
-ITERATIVE_ROUTER_SEQUENTIAL_PROMPT = """
+ADAPTIVE_ROUTER_SEQUENTIAL_PROMPT = """
 Original Question: {question}
 {References}
 Based on the previous subquestions and retrieved contexts, now list additional subquestions needed to answer the main question, separated by commas.
 """.strip()
 
-ITERATIVE_GENERATOR_SYSTEM_PROMPT = """
+ADAPTIVE_GENERATOR_SYSTEM_PROMPT = """
 You are an expert assistant that can provide the best possible answer to a question based on your general knowledge. Given a question and reference information, you should generate a comprehensive and accurate answer to the question using your knowledge, and you need to utilize your general knowledge when the provided reference information is insufficient.
 When generating your answer, make sure to:
 1. Directly address the question using your general knowledge.
@@ -40,7 +40,7 @@ When generating your answer, make sure to:
 3. Avoid adding any extra information that is not relevant to the question.
 """.strip()
 
-ITERATIVE_GENERATOR_QUERY_PROMPT = """
+ADAPTIVE_GENERATOR_QUERY_PROMPT = """
 Original Question: {query}
 Reference Information: {references}
 """.strip()
