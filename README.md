@@ -57,7 +57,7 @@ python demo.py
 
 ## Evaluation Result (Accuracy)
 
-Source: DPR
+Source:
 
 | Benchmark         | Model                 | vanilla | RAG (Top 1)    |RAG (Top 3)     |RAG (Top 5)     |
 | :---------------: | :-------------------: | :-----: | :-----: | :-----: | :-----: |
@@ -65,7 +65,7 @@ Source: DPR
 | TriviaQA_VAL_1000 | Llama-3.1-8B-Instruct | 72.1%   | 61.4%       | 68.0%       | 68.1%       |
 | TriviaQA_VAL_2000 | Llama-3.1-8B-Instruct | 72.7%   | 66.5%       | 68.0%       | 67.7%       |
 | TriviaQA_VAL_1000 | Qwen-3-8B | 59.2% | 63.5% | 66.9% | 69.5% |
-| TriviaQA_VAL_1000 | Qwen-2.5-7B-Instruct |  54.1%  |    57.3%    |     62%     |      D      |
+| TriviaQA_VAL_1000 | Qwen-2.5-7B-Instruct |  54.1%  |    57.3%    |     62.0%     |      64.0%      |
 |    NQ_VAL_1000    | Llama-3.1-8B-Instruct |  32.4%  |    39.6%    |    43.9%    |    44.7%    |
 | NQ_VAL_1000 | Qwen-3-8B |  25.2%  |    41.7%    |    46.6%    |    50.1%    |
 | NQ_VAL_1000 | Qwen-2.5-7B-Instruct  |  21.8%  |    37.9%    |    44.0%    | 44.9% |
@@ -74,14 +74,38 @@ Source: DPR
 
 Context Confidence
 
-|  Benchmark   |   Method    | Score  |
-| :----------: | :---------: | :----: |
-| TriviaQA_VAL | DPR (Top 5) | 68.66% |
-|    NQ_VAL    | DPR (Top 5) | 66.24% |
+|  Benchmark   | DPR (Top 5) | BM25 + Reranker | BM25(Top 20) | BGEM3 + Reranker | BGEM3(Top 20) |
+| :----------: | :---------: | :-------------: | :----------: | :--------------: | :-----------: |
+| TriviaQA_VAL |   68.66%    |      81.1%      |    90.3%     |      76.6%       |     90.9%     |
+|    NQ_VAL    |   66.24%    |      44.1%      |    62.4%     |      44.5%       |     69.2%     |
 
 
 
+Retrieve with BGE-Reranker-v2-m3
 
+|     Benchmark     |        Model         | BM25  | BGE-M3 |
+| :---------------: | :------------------: | :---: | :----: |
+| TriviaQA_VAL_1000 | Qwen-2.5-7B-Instruct | 75.4% | 72.1%  |
+|    NQ_VAL_1000    | Qwen-2.5-7B-Instruct | 37.8% | 37.2%  |
+
+
+
+|             | DPR  | BM25 | BGE-M3 |
+| :---------: | :--: | :--: | :----: |
+| Mmeory Cost | 60GB | 4GB  |  10GB  |
+
+Specs for index of BGE-M3:
+
+- IVF65536,PQ128
+
+## Iterative Evaluation
+
+|   Benchmark   |        Model         | BGE-M3 | BGE-M3 + Reranker |
+| :-----------: | :------------------: | :----: | :---------------: |
+| TriviaQA_100  | Qwen-2.5-7B-Instruct | 80.0%  |       84.0%       |
+|    NQ_100     | Qwen-2.5-7B-Instruct | 31.0%  |       34.0%       |
+| TriviaQA_1000 | Qwen-2.5-7B-Instruct | 77.4%  |       79.9%       |
+|    NQ_1000    | Qwen-2.5-7B-Instruct | 41.0%  |       42.6%       |
 
 
 
