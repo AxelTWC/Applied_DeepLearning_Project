@@ -8,16 +8,17 @@ Modules:
 - rag: simple RAG orchestration and a default local generator
 """
 
-from .chunking import split_text_fixed_size
 from .embeddings import EmbeddingModel
 from .vectorstore import InMemoryVectorStore
-from .retriever import Retriever
+from .retriever import Retriever, BM25Retriever
 from .rag import RAG
+from .reranker import BgeReranker
 
 __all__ = [
-    "split_text_fixed_size",
     "EmbeddingModel",
     "InMemoryVectorStore",
     "Retriever",
+    "BM25Retriever",
     "RAG",
+    "BgeReranker",
 ]
