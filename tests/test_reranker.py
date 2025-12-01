@@ -4,14 +4,14 @@ sys.path.append("..")
 from rag_pipeline.reranker import BgeReranker, Reranker
 
 class RerankerTest:
-    def test_bge_reranker(self, questions: str, contexts: list[str], top_k: int = 5):
-        reranker = BgeReranker()
+    def test_reranker(self, reranker: Reranker, questions: str, contexts: list[str], top_k: int = 5):
         reranked_contexts, reranked_scores = reranker.rerank(questions, contexts)
         print("BgeReranker test passed.")
         return reranked_contexts, reranked_scores
     
 if __name__ == "__main__":
     test = RerankerTest()
+    reranker = BgeReranker()
     questions = [
         "What was the Stephen King IT movie?",
         "When was the original Stephen King IT movie released?",
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     }
     for idx, qid in enumerate(question_ids):
         print(f"Question ID: {qid}")
-        reranked_contexts, reranked_scores = test.test_bge_reranker(questions[idx], contexts[qid], top_k=4)
+        reranked_contexts, reranked_scores = test.test_reranker(reranker, questions[idx], contexts[qid], top_k=4)
         for context, score in zip(reranked_contexts, reranked_scores):
             print(f"Score: {score:.4f}, Context: {context}")
         print("-"*100)
