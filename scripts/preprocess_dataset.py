@@ -1,9 +1,10 @@
 import sys 
 import os
-sys.path.append("..") 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from rag_pipeline.retriever import BM25Retriever, Retriever, FaissLocalRetriever
 from rag_pipeline.reranker import BgeReranker, Reranker
+from rag_pipeline.prompt import ADAPTIVE_ROUTER_SYSTEM_PROMPT, ADAPTIVE_ROUTER_INITIAL_PROMPT
 import json
 from typing import List, Dict, Optional
 from datasets import load_dataset
@@ -168,18 +169,69 @@ def preprocess_nq(filepath: str, retriever:Retriever, reranker:Optional[Reranker
         pbar.close()
     return retrieved_docs
 
+def format_nq_data(output_filepath:str, process_length: Optional[int] = None) -> List[Dict]:
+    dataset = load_dataset("google-research-datasets/natural_questions", "default", split="train").shuffle(seed=1508)
+    if process_length is None:
+        process_length = len(dataset)
+    samples = []
+    os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
+    idx = 0
+    if os.path.exists(output_filepath):
+        with open(output_filepath, 'r', encoding='utf-8') as f:
+            samples = json.load(f)
+        print(f"Loaded {len(samples)} preprocessed documents from {output_filepath}")
+        idx = samples[-1]['question_id'] if len(samples) > 0 else 0
+    with open(output_filepath, 'a', encoding='utf-8') as f:
+        with tqdm(desc="Formatting NQ Data", total=process_length) as pbar:
+            while len(samples) < process_length:
+                if idx >= len(dataset) - 1:
+                    break
+                sample = dataset[idx + 1]
+                short_answers = sample['annotations']['short_answers']
+                if not short_answers:
+                    idx += 1
+                    continue
+                answer_list = []
+                answer_set = set()
+                for answer in short_answers:
+                    if answer['text'] is None or len(answer['text']) == 0:
+                        idx += 1
+                        continue
+                    for txt in answer['text']:
+                        if txt in answer_set:
+                            continue
+                        answer_set.add(txt)
+                        answer_list.append(txt)
+                if len(answer_list) == 0:
+                    idx += 1
+                    continue
+                messages = [
+                    {"role": "system", "content": ADAPTIVE_ROUTER_SYSTEM_PROMPT},
+                    {"role": "user", "content": ADAPTIVE_ROUTER_INITIAL_PROMPT.format(question=sample['question']['text'])}
+                ]
+                samples.append({
+                    'messages': messages,
+                    'ground_truth': answer_list,
+                    'question': sample['question']['text']
+                })
+                f.write(json.dumps(samples[-1], ensure_ascii=False) + '\n')
+                idx += 1
+                pbar.update(1)
+            pbar.close()
+    return samples
+
 if __name__ == "__main__":
-    retriever = FaissLocalRetriever()
+    # retriever = FaissLocalRetriever()
     reranker = None
-    preprocess_triviaqa(
-        filepath="../data/preprocessed/",
-        retriever=retriever,
-        reranker=reranker,
-        top_k=20,
-        preprocess_length=1000,
-        threads=1,
-        split="validation"
-    )
+    # preprocess_triviaqa(
+    #     filepath="../data/preprocessed/",
+    #     retriever=retriever,
+    #     reranker=reranker,
+    #     top_k=20,
+    #     preprocess_length=1000,
+    #     threads=1,
+    #     split="validation"
+    # )
     # preprocess_nq(
     #     filepath="../data/preprocessed/",
     #     retriever=retriever,
@@ -189,3 +241,6 @@ if __name__ == "__main__":
     #     threads=1,
     #     split="validation"
     # )
+    process_length = 1000
+    format_nq_data(output_filepath=f"../dataset/nq_{process_length}.jsonl", process_length=process_length)
+    
