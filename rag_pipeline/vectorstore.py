@@ -1,14 +1,17 @@
-from typing import List, Dict, Tuple, Optional, Iterable, Any
+import os
+import sys
+
+__package__ = "rag_pipeline"
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from typing import List, Dict, Tuple, Optional, Iterable
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 import numpy as np
-import pandas as pd
 import os
 import torch
 import faiss
 import datasets
-import pickle
-import math
 import sqlite3
 
 def _cosine_sim_matrix(a: np.ndarray, b: np.ndarray) -> np.ndarray:
