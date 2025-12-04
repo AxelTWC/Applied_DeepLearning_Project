@@ -1,14 +1,13 @@
 from typing import List, Dict
-import os
 
 def break_condition(response: str) -> bool:
     """Decide whether to continue based on the router response."""
     decision = response.strip().lower()
     if "terminate" in decision or not decision:
-        return False
+        return True
     else:
         # Default to False if unclear
-        return True
+        return False
 
 def print_history(history: List[Dict]):
     for message in history:
