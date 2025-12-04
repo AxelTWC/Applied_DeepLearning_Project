@@ -1,6 +1,6 @@
 import os
 import sys
-sys.path.append("..")
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rag_pipeline.rag import RAG, AdaptiveRAG
 from rag_pipeline.retriever import BM25Retriever, FaissLocalRetriever
 from rag_pipeline.reranker import BgeReranker
