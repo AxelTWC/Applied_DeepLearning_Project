@@ -13,3 +13,4 @@ faiss-cpu
 pyserini
 accelerate
 FlagEmbedding
+wandb
