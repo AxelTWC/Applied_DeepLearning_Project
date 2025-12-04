@@ -19,6 +19,8 @@ class TestRAG:
             retriever=retriever,
             reranker=reranker
         )
+        if os.path.exists("../data/rag_history/iterative_rag_test.txt"):
+            os.remove("../data/rag_history/iterative_rag_test.txt")
         result = rag.generate(query, top_k=top_k, max_step=10, file_path="../data/rag_history/iterative_rag_test.txt")
         assert "query" in result
         assert "answer" in result
