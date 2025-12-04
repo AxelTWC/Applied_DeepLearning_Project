@@ -28,7 +28,7 @@ Now, list the subquestions needed to answer the main question, separated by comm
 
 ADAPTIVE_ROUTER_SEQUENTIAL_PROMPT = """
 Original Question: {question}
-{References}
+{references}
 Based on the previous subquestions and retrieved contexts, now list additional subquestions needed to answer the main question, separated by commas.
 """.strip()
 
