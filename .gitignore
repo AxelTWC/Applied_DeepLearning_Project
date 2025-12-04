@@ -5,6 +5,7 @@ data/rag_history
 data/preprocessed
 faiss_store/*
 .DS_Store
+wandb/
 
 # Python
 __pycache__/
