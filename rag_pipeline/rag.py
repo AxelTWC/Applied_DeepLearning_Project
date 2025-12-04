@@ -10,7 +10,7 @@ from rag_pipeline.generator import Generator
 from rag_pipeline.reranker import Reranker
 from rag_pipeline.router import Router
 from rag_pipeline.prompt import ADAPTIVE_GENERATOR_SYSTEM_PROMPT, ADAPTIVE_GENERATOR_QUERY_PROMPT
-from rag_pipeline.utils import break_condition, record_step
+from rag_pipeline.utils import break_condition, record_step, extract_subtopics
 import os
 def default_local_llm(prompt: str) -> str:
     """A very small default 'LLM' that echoes the context and query.
@@ -79,11 +79,9 @@ class AdaptiveRAG(RAG):
             response = self.router.route(query, references=references)
             if file_path:
                 record_step(current_step, self.router.history, response, file_path)
-            if break_condition(response):
+            subquestions = extract_subtopics(response)
+            if len(subquestions) == 0 or break_condition(response):
                 break
-            subquestions = [subq.strip() for subq in response.split(",") if subq.strip()]
-            if len(subquestions) == 0:
-                subquestions = [query]
             references = ""
             question_ids = [f"{query}_subq_{i}" for i in range(len(subquestions))]
             raw_contexts, retrieval_contexts = self.retriever.retrieve_batch(subquestions, question_ids=question_ids, top_k=top_k)
