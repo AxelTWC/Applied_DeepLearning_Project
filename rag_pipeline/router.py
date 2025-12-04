@@ -1,5 +1,11 @@
-from .generator import Generator
-from .prompt import ADAPTIVE_ROUTER_SYSTEM_PROMPT, ADAPTIVE_ROUTER_INITIAL_PROMPT, ADAPTIVE_ROUTER_SEQUENTIAL_PROMPT
+import os
+import sys
+
+__package__ = "rag_pipeline"
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from rag_pipeline.generator import Generator
+from rag_pipeline.prompt import ADAPTIVE_ROUTER_SYSTEM_PROMPT, ADAPTIVE_ROUTER_INITIAL_PROMPT, ADAPTIVE_ROUTER_SEQUENTIAL_PROMPT
 from typing import List, Optional
 
 class Router():
@@ -26,7 +32,7 @@ class AdaptiveRouter(Router):
     def route(self, question: str, references: Optional[str] = None) -> List[str]:
         query = ADAPTIVE_ROUTER_INITIAL_PROMPT.format(question=question).strip()
         if references:
-            query = ADAPTIVE_ROUTER_SEQUENTIAL_PROMPT.format(question=question, References=references).strip()
+            query = ADAPTIVE_ROUTER_SEQUENTIAL_PROMPT.format(question=question, references=references).strip()
         self.history.append({
             "role": "user",
             "content": query

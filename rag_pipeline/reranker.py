@@ -1,5 +1,10 @@
-
 import torch
+import os
+import sys
+
+__package__ = "rag_pipeline"
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from FlagEmbedding import FlagReranker
 from typing import Tuple, List
 import transformers

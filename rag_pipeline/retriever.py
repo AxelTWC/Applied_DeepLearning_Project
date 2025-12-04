@@ -1,19 +1,21 @@
+import os
+import sys
+
+__package__ = "rag_pipeline"
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from curses import raw
 from typing import List, Dict, Optional
 from sentence_transformers import SentenceTransformer
-from .embeddings import EmbeddingModel
-from .vectorstore import InMemoryVectorStore
-from .chunking import FixedSizeChunk
-from .vectorstore import FaissLocalVectorStore
+from rag_pipeline.embeddings import EmbeddingModel
+from rag_pipeline.vectorstore import InMemoryVectorStore
+from rag_pipeline.chunking import FixedSizeChunk
+from rag_pipeline.vectorstore import FaissLocalVectorStore
 from pyserini.search.faiss import FaissSearcher
 from pyserini.search.lucene import LuceneSearcher
 from pyserini.encode import DprQueryEncoder
-from datasets import load_dataset
 from typing import List, Dict, Optional, Tuple
 import numpy as np
-import json
-from tqdm import tqdm
-import os
 import torch
 
 class Retriever:
