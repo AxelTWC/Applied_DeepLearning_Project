@@ -186,7 +186,7 @@ def format_nq_data(output_filepath:str, process_length: Optional[int] = None) ->
             while len(samples) < process_length:
                 if idx >= len(dataset) - 1:
                     break
-                sample = dataset[idx + 1]
+                sample = dataset[idx]
                 short_answers = sample['annotations']['short_answers']
                 if not short_answers:
                     idx += 1
@@ -220,6 +220,40 @@ def format_nq_data(output_filepath:str, process_length: Optional[int] = None) ->
             pbar.close()
     return samples
 
+def format_triviaqa_data(output_filepath:str, process_length: Optional[int] = None) -> List[Dict]:
+    dataset = load_dataset("trivia_qa", "rc", split="train").shuffle(seed=1508)
+    if process_length is None:
+        process_length = len(dataset)
+    samples = []
+    os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
+    idx = 0
+    if os.path.exists(output_filepath):
+        with open(output_filepath, 'r', encoding='utf-8') as f:
+            samples = json.load(f)
+        print(f"Loaded {len(samples)} preprocessed documents from {output_filepath}")
+        idx = samples[-1]['question_id'] if len(samples) > 0 else 0
+    with open(output_filepath, 'a', encoding='utf-8') as f:
+        with tqdm(desc="Formatting TriviaQA Data", total=process_length) as pbar:
+            while len(samples) < process_length:
+                if idx >= len(dataset) - 1:
+                    break
+                sample = dataset[idx]
+                question = sample['question']
+                answers = sample['answer']['aliases']
+                messages = [
+                    {"role": "system", "content": ADAPTIVE_ROUTER_SYSTEM_PROMPT},
+                    {"role": "user", "content": ADAPTIVE_ROUTER_INITIAL_PROMPT.format(question=question)}
+                ]
+                samples.append({
+                    'messages': messages,
+                    'ground_truth': answers,
+                    'question': question,
+                })
+                f.write(json.dumps(samples[-1], ensure_ascii=False) + '\n')
+                idx += 1
+                pbar.update(1)
+            pbar.close()
+    return samples
 if __name__ == "__main__":
     # retriever = FaissLocalRetriever()
     reranker = None
@@ -243,4 +277,5 @@ if __name__ == "__main__":
     # )
     process_length = 1000
     format_nq_data(output_filepath=f"../dataset/nq_{process_length}.jsonl", process_length=process_length)
+    # format_triviaqa_data(output_filepath=f"../dataset/triviaqa_{process_length}.jsonl", process_length=process_length)
     
