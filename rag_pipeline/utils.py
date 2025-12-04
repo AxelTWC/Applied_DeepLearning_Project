@@ -1,4 +1,5 @@
 from typing import List, Dict
+import re
 
 def break_condition(response: str) -> bool:
     """Decide whether to continue based on the router response."""
@@ -27,3 +28,20 @@ def record_step(step: int, model_history: List[Dict], model_response: str, file_
         f.write("\n----------  MODEL RESPONSE. ----------")
         f.write(f"\n{model_response}\n")
         f.write(f"\n{"-"*100}\n")
+        
+def extract_subtopics(response: str) -> List[str]:
+    pattern = r"<subtopic>\s*(.*?)\s*</subtopic>"
+    matches = re.findall(pattern, response, re.DOTALL)
+    return [m.strip() for m in matches if m.strip()]
+
+if __name__ == "__main__":
+    response = """
+    <subtopic>
+    subtopic 1
+    </subtopic>
+    <subtopic>
+    subtopic 2
+    </subtopic>
+    <subtopic>subtopic 3</subtopic>
+    """
+    print(extract_subtopics(response))
