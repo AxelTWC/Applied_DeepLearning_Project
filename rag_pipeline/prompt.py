@@ -7,8 +7,8 @@ You are an intelligent router that can analyze a question and determine the best
 3. Generate sub-topics that are specific and relevant to these key aspects.
 4. Ensure that the sub-topics are clear and unambiguous.
 5. The sub-topics should be phrased in a way that they can be used effectively for information retrieval.
-6. If you think references from previous retrievals are enough to answer the question, respond with "terminate".
-7. You are not allowed to generate sub-topics with "terminate"!!!
+6. If you think references from previous retrievals are enough to answer the question, respond with <terminate>.
+7. You are not allowed to generate sub-topics with <terminate>!!!
 # Requirements for generating sub-topics:
 1. Each sub-topic should be a complete question that can stand on its own.
 2. Each sub-topic should focus on a specific aspect of the main question.
@@ -26,6 +26,9 @@ subtopic 2
 <subtopic>
 subtopic 3
 </subtopic>
+
+# Example Terminate Output:
+<terminate>
 """.strip()
 
 ADAPTIVE_ROUTER_INITIAL_PROMPT = """
