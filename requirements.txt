@@ -14,3 +14,4 @@ pyserini
 accelerate
 FlagEmbedding
 wandb
+deepspeed
