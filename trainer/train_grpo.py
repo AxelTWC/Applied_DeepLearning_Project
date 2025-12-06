@@ -11,8 +11,9 @@ import gc
 import re
 import copy
 from typing import List
-from trainer.trainer_utils import init_distributed_mode, Logger, setup_seed, SkipBatchSampler, is_main_process, deepspeed_checkpoint
+from trainer.trainer_utils import init_distributed_mode, Logger, setup_seed, SkipBatchSampler, is_main_process, deepspeed_checkpoint, setup_logging
 import torch.distributed as dist
+from typing import Dict, Tuple
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
@@ -39,7 +40,7 @@ def get_ds_config(args):
         
         # ================= ZeRO-3 core configuration =================
         "zero_optimization": {
-            "stage": 2,
+            "stage": args.stage,
 
             # offload parameters to CPU memory
             "offload_param": {
@@ -52,8 +53,11 @@ def get_ds_config(args):
                 "device": "cpu",
                 "pin_memory": True
             } if args.offload else None,
-
+            "allgather_partitions": False,
+            "allgather_bucket_size": 2e8,
             "overlap_comm": True,
+            "reduce_scatter": True,
+            "reduce_bucket_size": 2e8,
             "contiguous_gradients": True,
             "stage3_param_persistence_threshold": 1e4, 
             "stage3_prefetch_bucket_size": 5e8,
@@ -83,26 +87,26 @@ def get_ds_config(args):
     return ds_config
 
 def calc_reward(args, prompts: List[str], responses: List[List[str]], contexts: List[List[str]], ground_truth: List[List[str]], answers: List[str]) -> torch.Tensor:
-    def context_gt_reward(contexts: List[str], gt: str, current_step: int, total_step: int) -> float:
-        gt = [normalize_text(v) for v in gt]
+    def context_gt_reward(contexts: List[str], gt: List[str], current_step: int, total_step: int) -> float:
         for ctx in contexts:
-            if normalize_text(ctx) in gt:
-                return 1.0
+            for v in gt:
+                if normalize_text(v) in normalize_text(ctx):
+                    return 2.0
         return 0.0
     
-    def answer_gt_reward(answer: str, gt: str) -> float:
-        gt = [normalize_text(v) for v in gt]
-        if normalize_text(answer) in gt:
-            return 5.0
+    def answer_gt_reward(answer: str, gt: List[str]) -> float:
+        for v in gt:
+            if normalize_text(v) in normalize_text(answer):
+                return 3.0
         return -2.0
     
-    def ctx_penalty(contexts: List[str], gt: str, current_step: int, gt_step: int) -> float:
-        gt = [normalize_text(v) for v in gt]
+    def ctx_penalty(contexts: List[str], gt: List[str], current_step: int, gt_step: int) -> float:
         if gt_step != -1 and current_step - gt_step > 1:
             for ctx in contexts:
-                if normalize_text(ctx) in gt:
-                    return -0.1
-            return -0.25
+                for v in gt:
+                    if normalize_text(v) in normalize_text(ctx):
+                        return -0.5
+            return -1.0
         return 0.0
     
     def foramt_reward(response: str):
@@ -110,15 +114,29 @@ def calc_reward(args, prompts: List[str], responses: List[List[str]], contexts: 
         matches = re.findall(pattern, response, re.DOTALL)
         rewards = 0.0
         if len(matches) != 0:
-            rewards += 0.05
+            rewards += 1.0
+        if len(matches) > 5:
+            rewards -= 1.5
+        if len(matches) == 0 and response != "<terminate>":
+            rewards -= 2.5
+        match_set = set()
+        for match in matches:
+            if match.strip() in match_set:
+                rewards -= 0.3
+            else:
+                match_set.add(match.strip())
         def mark_num(text: str, matches: List[str]) -> int:
             reward = 0
             if text.count("<subtopic>") == text.count("</subtopic>"):
                 reward += 0.1
             if text.count("<subtopic>") != len(matches):
                 reward -= 0.1 * abs(text.count("<subtopic>") - len(matches))
+            if text.count("</subtopic>") != len(matches):
+                reward -= 0.1 * abs(text.count("</subtopic>") - len(matches))
             return reward
         rewards += mark_num(response, matches)
+        if response.endswith("</subtopic>"):
+            rewards += 0.05            
         return rewards
     
     rewards = torch.zeros(len(responses), device=args.device)
@@ -131,23 +149,30 @@ def calc_reward(args, prompts: List[str], responses: List[List[str]], contexts: 
             answer = answers[response_idx]
             gt = ground_truth[response_idx]
             gt_step = -1
+            response_set = set()
             for idx, r in enumerate(response):
+                if r in response_set:
+                    rewards[response_idx] -= 0.3
+                else:
+                    response_set.add(r)
                 rewards[response_idx] += foramt_reward(r)
-                if break_condition(r) or len(context) < idx + 1:
+                if break_condition(r) or idx == len(response) - 1:
                     if idx != len(response) - 1:
                         rewards[response_idx] -= 0.2
                     rewards[response_idx] += answer_gt_reward(answer, gt)
                     # terminate word reward
-                    if "terminate" == r.lower():
-                        rewards[response_idx] += 0.1
+                    if "<terminate>" == r:
+                        rewards[response_idx] += 0.4
                     else:
-                        rewards[response_idx] -= 0.1
+                        rewards[response_idx] -= 0.3
                     continue
                 ctx = context[idx]
                 rewards[response_idx] += context_gt_reward(ctx, gt, idx, len(response)) + ctx_penalty(ctx, gt, idx, gt_step)
                 if context_gt_reward(ctx, gt, idx, len(response)) > 0 and gt_step == -1:
                     gt_step = idx
-            rewards[response_idx] -= 0.1 * len(response)
+                if r.lower().endswith("<terminate>"):
+                    rewards[response_idx] -= 0.05
+            rewards[response_idx] -= 1.0 * len(response)
     return rewards
 
 def collate_fn(batch):
@@ -222,7 +247,59 @@ def stitch_trajectory(tokenizer, messages):
 
     return torch.tensor(input_ids, dtype=torch.long), torch.tensor(mask, dtype=torch.long)
 
-def grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retriever, start_step, wandb, args):
+
+def stitch_trajectory_step(tokenizer, messages: List[Dict], target_assistant_idx: int, max_seq_len: int = None) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Construct training samples for the "target_assistant_idx-th assistant output"
+    Args:
+    - tokenizer: The tokenizer to use
+    - messages: The complete conversation history [{"role": "user"...}, {"role": "assistant"...}...]
+    - target_assistant_idx: The index of the target assistant message, starting from 0
+    - max_seq_len: Optional, cut input_ids and mask to max_seq_len to prevent OOM
+    Returns:
+    - input_ids: The input ids of the training samples
+    - mask: The mask of the training samples
+    """
+    input_ids = []
+    mask = []
+
+    prev_ids = []
+    current_history = []
+    assistant_counter = 0
+
+    for msg in messages:
+        current_history.append(msg)
+
+        current_ids = tokenizer.apply_chat_template(
+            current_history,
+            tokenize=True,
+            add_generation_prompt=False
+        )
+
+        new_token_ids = current_ids[len(prev_ids):]
+
+        new_mask = [0] * len(new_token_ids)
+
+        if msg["role"] == "assistant":
+            # mark the tokens with target_assistant_idx as 1
+            if assistant_counter == target_assistant_idx:
+                new_mask = [1] * len(new_token_ids)
+            assistant_counter += 1
+
+        input_ids.extend(new_token_ids)
+        mask.extend(new_mask)
+
+        prev_ids = current_ids
+
+    # TOnly keep the last max_seq_len tokens
+    if max_seq_len is not None and len(input_ids) > max_seq_len:
+        input_ids = input_ids[-max_seq_len:]
+        mask = mask[-max_seq_len:]
+
+    return torch.tensor(input_ids, dtype=torch.long), torch.tensor(mask, dtype=torch.long)
+
+
+def grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, ans_model, retriever, start_step, wandb, args):
     for global_step, batch in enumerate(tqdm(loader, initial=start_step + 1, desc=f"Epoch {epoch}"), start=start_step + 1):
         messages = batch['messages']
         question = batch['question']
@@ -231,8 +308,6 @@ def grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retrieve
         total_samples = args.batch_size * args.num_generations
         batch_contexts = []
         batch_responses = []
-        batch_raw_outputs = []
-        batch_raw_response_ids = []
         batch_answers = []
         with torch.no_grad():
             # use .module for DDP model
@@ -242,8 +317,6 @@ def grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retrieve
                 responses = [[] for _ in range(args.batch_size)]
                 batch_references = [[] for _ in range(args.batch_size)]
                 answers = ["" for _ in range(args.batch_size)]
-                raw_outputs = []
-                raw_response_ids = []
                 # Mask to keep track of active generations. 1 means active, 0 means finished.
                 active_mask = [True] * args.batch_size 
                 
@@ -274,8 +347,6 @@ def grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retrieve
                         num_return_sequences=1, pad_token_id=tokenizer.pad_token_id)
                     response_ids = outputs[:, prompt_inputs["input_ids"].size(1):]
                     response_tokens = tokenizer.batch_decode(response_ids, skip_special_tokens=True)
-                    raw_outputs.append(outputs)
-                    raw_response_ids.append(response_ids)
                     # Map back results to original indices
                     current_response_idx = 0
                     for i in range(args.batch_size):
@@ -287,11 +358,22 @@ def grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retrieve
                         response_token = response_tokens[current_response_idx]
                         current_response_idx += 1
                         
+                        # Randomly decide to terminate based on step
+                        base_prob = 0.02
+                        step_factor = 0.06
+                        current_prob = base_prob + (step * step_factor)
+                        current_prob = min(current_prob, 0.50)
+                        
+                        if torch.rand(1).item() < current_prob: 
+                            response_token = "<terminate>"
+                        
                         # Store response
                         responses[i].append(response_token)
                         gen_inputs[generation_idx][i].append({"role": "assistant", "content": response_token})
                             
                         sub_topics = extract_subtopics(response_token)
+                        if len(sub_topics) > 5:
+                            sub_topics = sub_topics[:5]
                         if break_condition(response_token) or len(sub_topics) == 0:
                             active_mask[i] = False
                             references = "\n".join(batch_references[i]) if len(batch_references[i]) > 0 else ""
@@ -301,7 +383,7 @@ def grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retrieve
                             ]
                             input_text = tokenizer.apply_chat_template(generator_messages, tokenize=False, add_generation_prompt=True)
                             generator_inputs = tokenizer(input_text, return_tensors="pt").to(args.device)
-                            response = ref_model.generate(**generator_inputs, max_new_tokens=args.max_gen_len, temperature=1.0, top_p=0.9, top_k=40, num_return_sequences=1, pad_token_id=tokenizer.pad_token_id)
+                            response = ans_model.generate(**generator_inputs, max_new_tokens=args.max_gen_len, temperature=1.0, top_p=0.9, top_k=40, num_return_sequences=1, pad_token_id=tokenizer.pad_token_id)
                             response = [
                                 output_ids[len(input_ids):] for input_ids, output_ids in zip(generator_inputs.input_ids, response)
                             ]
@@ -332,7 +414,7 @@ def grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retrieve
                             ]
                             input_text = tokenizer.apply_chat_template(generator_messages, tokenize=False, add_generation_prompt=True)
                             generator_inputs = tokenizer(input_text, return_tensors="pt").to(args.device)
-                            response = ref_model.generate(**generator_inputs, max_new_tokens=args.max_gen_len, temperature=1.0, top_p=0.9, top_k=40, num_return_sequences=1, pad_token_id=tokenizer.pad_token_id)
+                            response = ans_model.generate(**generator_inputs, max_new_tokens=args.max_gen_len, temperature=1.0, top_p=0.9, top_k=40, num_return_sequences=1, pad_token_id=tokenizer.pad_token_id)
                             response = [
                                 output_ids[len(input_ids):] for input_ids, output_ids in zip(generator_inputs.input_ids, response)
                             ]
@@ -343,8 +425,6 @@ def grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retrieve
                 
                 batch_contexts.append(contexts)
                 batch_responses.append(responses)
-                batch_raw_outputs.append(raw_outputs)
-                batch_raw_response_ids.append(raw_response_ids)
                 batch_answers.append(answers)
         # Flatten batch_contexts and batch_responses to [batch_size * num_generations]
         # Original structure: [num_generations, batch_size, steps]
@@ -352,8 +432,6 @@ def grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retrieve
         flat_batch_responses = []
         flat_batch_contexts = []
         flat_batch_gts = []
-        flat_batch_raw_outputs = []
-        flat_batch_raw_response_ids = []
         flat_batch_messages = []
         flat_batch_answers = []
         for i in range(args.batch_size):
@@ -361,8 +439,6 @@ def grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retrieve
                 flat_batch_responses.append(batch_responses[j][i])
                 flat_batch_contexts.append(batch_contexts[j][i])
                 flat_batch_gts.append(batch['ground_truth'][i])
-                flat_batch_raw_outputs.append(batch_raw_outputs[j])
-                flat_batch_raw_response_ids.append(batch_raw_response_ids[j])
                 flat_batch_messages.append(gen_inputs[j][i])
                 flat_batch_answers.append(batch_answers[j][i])
         rewards = calc_reward(args, question, flat_batch_responses, flat_batch_contexts, flat_batch_gts, flat_batch_answers)
@@ -379,26 +455,6 @@ def grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retrieve
             with open(f'debug/{epoch}/grpo_debug_epoch{epoch}_step{global_step}.json', 'w', encoding='utf-8') as f:
                 json.dump(sampler, f, indent=4)
             
-        full_input_ids_list = []
-        full_masks_list = []
-
-        for i in range(len(flat_batch_messages)):
-            ids, mask = stitch_trajectory(
-                tokenizer, 
-                flat_batch_messages[i] # pass in the complete messages list
-            )
-            full_input_ids_list.append(ids)
-            full_masks_list.append(mask)
-            
-        from torch.nn.utils.rnn import pad_sequence
-        full_input_ids = pad_sequence(full_input_ids_list, batch_first=True, padding_value=tokenizer.pad_token_id).to(args.device)
-        full_masks = pad_sequence(full_masks_list, batch_first=True, padding_value=0).to(args.device)
-        attention_mask = (full_input_ids != tokenizer.pad_token_id).long().to(args.device)
-            
-        policy_logps, valid_mask = compute_logps_merged(model_engine, full_input_ids, attention_mask, full_masks)
-        with torch.no_grad():
-            ref_logps, _ = compute_logps_merged(ref_model, full_input_ids, attention_mask, full_masks)
-            
         # Advantages
         mean_r = grouped_rewards.mean(dim=1).repeat_interleave(args.num_generations)
         std_r = grouped_rewards.std(dim=1).repeat_interleave(args.num_generations)
@@ -406,15 +462,82 @@ def grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retrieve
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)  # [B*num_gen]
         # print(f"Final Shapes - LogP: {policy_logps.shape}, Adv: {advantages.shape}")
         
-        kl_div = ref_logps - policy_logps
-        per_token_kl = torch.exp(kl_div) - kl_div - 1
         
-        per_token_loss = -(torch.exp(policy_logps - policy_logps.detach()) * advantages.unsqueeze(1) - args.beta * per_token_kl)
+        # Flatten the trajectories into step samples
+        step_input_ids_list = []
+        step_masks_list = []
+        traj_index_for_step = [] 
         
-        loss = (per_token_loss * valid_mask).sum() / valid_mask.sum()
-        loss = loss / args.accumulation_steps
+        for traj_idx, msgs in enumerate(flat_batch_messages):
+            num_assistant = sum(1 for m in msgs if m["role"] == "assistant")
+            for step_idx in range(num_assistant):
+                ids, mask = stitch_trajectory_step(
+                    tokenizer,
+                    msgs,
+                    target_assistant_idx=step_idx,
+                    max_seq_len=args.max_seq_len
+                )
+                step_input_ids_list.append(ids)
+                step_masks_list.append(mask)
+                traj_index_for_step.append(traj_idx)
+
+        
+        if len(step_input_ids_list) == 0:
+            continue
+
+        traj_index_for_step = torch.tensor(traj_index_for_step, dtype=torch.long, device=args.device)
+        advantages_step = advantages[traj_index_for_step]  # [num_steps]
+        advantages_step = (advantages_step - advantages_step.mean()) / (advantages_step.std() + 1e-8)
+
+        total_valid_tokens = 0
+        for m in step_masks_list:
+            total_valid_tokens += int(m.sum().item())
+        total_valid_tokens = max(total_valid_tokens, 1)
+
+
+        # Calculate logprob / KL / loss in chunks, to avoid OOM
+        from torch.nn.utils.rnn import pad_sequence
+
+        total_loss_tokens = 0.0 
+        num_steps = len(step_input_ids_list)
+        step_chunk_size =1
+        for chunk_start in range(0, num_steps, step_chunk_size):
+            chunk_end = min(chunk_start + step_chunk_size, num_steps)
+            ids_chunk = step_input_ids_list[chunk_start:chunk_end]
+            masks_chunk = step_masks_list[chunk_start:chunk_end]
+            adv_chunk = advantages_step[chunk_start:chunk_end]
+
+            input_ids = pad_sequence(
+                ids_chunk, batch_first=True, padding_value=tokenizer.pad_token_id
+            ).to(args.device)
+            completion_mask = pad_sequence(
+                masks_chunk, batch_first=True, padding_value=0
+            ).to(args.device)
+            attention_mask = (input_ids != tokenizer.pad_token_id).long().to(args.device)
+
+            policy_logps, valid_mask = compute_logps_merged(
+                model_engine, input_ids, attention_mask, completion_mask
+            )
+            with torch.no_grad():
+                ref_logps, _ = compute_logps_merged(
+                    ref_model, input_ids, attention_mask, completion_mask
+                )
+
+            kl_div = ref_logps - policy_logps
+            per_token_kl = torch.exp(kl_div) - kl_div - 1
+
+            per_token_loss = -(
+                torch.exp(policy_logps - policy_logps.detach()) * adv_chunk.unsqueeze(1)
+                - args.beta * per_token_kl
+            )
+
+            loss_tokens = (per_token_loss * valid_mask).sum()
+            total_loss_tokens += loss_tokens
+
+        loss = (total_loss_tokens / total_valid_tokens) / args.accumulation_steps
         model_engine.backward(loss)
         model_engine.step()
+        # torch.cuda.empty_cache()
             
         if global_step % args.log_interval == 0 or global_step == iters:
             if is_main_process():
@@ -436,9 +559,11 @@ def grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retrieve
                         "learning_rate": current_lr
                     })
 
-        if (global_step % args.save_interval == 0 or global_step == iters - 1) and is_main_process():
-            client_state = {'epoch': epoch, 'step': global_step, 'wandb_id': wandb.run.id if wandb else None}
-            deepspeed_checkpoint(args.model, args.save_name, model_engine, client_state, save_dir=args.save_dir)
+        if (global_step % args.save_interval == 0 or global_step == iters - 1):
+            wandb_id = wandb.run.id if (wandb is not None and wandb.run is not None) else None
+            client_state = {'epoch': epoch, 'step': global_step, 'wandb_id': wandb_id}
+            tag = f"epoch{epoch}_step{global_step}"
+            deepspeed_checkpoint(args.model, args.save_name, model_engine, client_state, save_dir=args.save_dir, tag=tag)
 
     torch.cuda.empty_cache()
     gc.collect()
@@ -466,11 +591,13 @@ if __name__ == "__main__":
     parser.add_argument("--from_checkpoint", default=0, type=int, choices=[0, 1], help="Whether to load the model from a checkpoint")
     parser.add_argument("--use_wandb", action="store_true", help="Whether to use wandb")
     parser.add_argument("--wandb_project", type=str, default="AdaptiveRAG-GRPO", help="wandb project name")
-    parser.add_argument("--data_path", type=str, default="/root/autodl-tmp/dataset/triviaqa_1000.jsonl", help="The path to load the data")
+    parser.add_argument("--data_path", type=str, default="../dataset/triviaqa_1000.jsonl", help="The path to load the data")
     parser.add_argument("--beta", type=float, default=0.02, help="The beta for the KL divergence")
     parser.add_argument("--offload", type=int, default=0, choices=[0,1], help="Whether to offload parameters and optimizer states to CPU")
     parser.add_argument("--local_rank", type=int, default=-1, help="DeepSpeed required argument")
+    parser.add_argument("--stage", type=int, default=2, choices=[0,1,2,3], help="ZeRO optimization stage")
     parser.add_argument("--debug", type=int, default=1, choices=[0,1], help="Whether to debug training process by output into debug dir")
+    parser.add_argument("--max_seq_len", type=int, default=2048, help="The maximum sequence length for training")
     parser = deepspeed.add_config_arguments(parser)
     args = parser.parse_args()
     
@@ -478,6 +605,7 @@ if __name__ == "__main__":
     local_rank = init_distributed_mode()
     if dist.is_initialized(): args.device = f'cuda:{local_rank}'
     setup_seed(1508 + (dist.get_rank() if dist.is_initialized() else 0))
+    setup_logging()
     
     # Initialize Retriever
     retriever = FaissLocalRetriever(embedding_model="BAAI/bge-m3", faiss_index_path="/root/autodl-tmp")
@@ -485,6 +613,10 @@ if __name__ == "__main__":
     dtype = torch.bfloat16 if args.dtype == "bfloat16" else torch.float16
     autocast_ctx = nullcontext() if args.device == "mps" or args.device == "cpu" else torch.cuda.amp.autocast(dtype=dtype)
     if args.debug:
+        if os.path.exists('debug'):
+            if not args.from_checkpoint:
+                import shutil
+                shutil.rmtree('debug')
         os.makedirs('debug', exist_ok=True)
         
     # ================================ Initialize Model ================================
@@ -504,6 +636,7 @@ if __name__ == "__main__":
         trust_remote_code=True
     )
     model_raw.gradient_checkpointing_enable()
+    model_raw.config.use_cache = False
     
     # initialize the model with deepspeed
     model_engine, optimizer, _, scheduler = deepspeed.initialize(
@@ -516,15 +649,32 @@ if __name__ == "__main__":
         args.model, 
         torch_dtype=torch.bfloat16 if args.dtype == "bfloat16" else torch.float32
     )
+    ref_model.config.use_cache = False
     ref_model.to(args.device).eval()
+    
+    ans_model = AutoModelForCausalLM.from_pretrained(
+        "Qwen/Qwen2.5-7B-Instruct",
+        torch_dtype=torch.bfloat16 if args.dtype == "bfloat16" else torch.float32
+    )
+    # ans_model = deepspeed.init_inference(
+    #     model=ans_model_raw,
+    #     mp_size=dist.get_world_size(),
+    #     dtype=torch.bfloat16,
+    #     replace_method='auto',
+    #     max_tokens=4096
+    # )
+    # ans_model.eval()
+    ans_model.to(args.device).eval()
+    # ans_model = None
     
     # ================================ Recover from Checkpoint ================================
     start_epoch, start_step = 0, 0
     client_state = {}
-    if args.from_checkpoint:
-        _, client_state = model_engine.load_checkpoint(args.save_dir, tag=args.save_name)
+    if args.from_checkpoint and os.path.exists(f"{args.save_dir}/{args.save_name}"):
+        _, client_state = model_engine.load_checkpoint(f"{args.save_dir}/{args.save_name}", tag=None)
         start_epoch = client_state.get('epoch', 0)
         start_step = client_state.get('step', 0)
+        Logger(f"Resume training from checkpoint: epoch {start_epoch}, step {start_step}")
         
     # ================================ Configure wandb ================================
     if args.use_wandb:
@@ -544,8 +694,8 @@ if __name__ == "__main__":
             batch_sampler = SkipBatchSampler(train_sampler or range(len(train_ds)), args.batch_size, start_step + 1)
             loader = DataLoader(train_ds, batch_sampler=batch_sampler, num_workers=args.num_workers, pin_memory=True, collate_fn=collate_fn)
             Logger(f'Epoch [{epoch + 1}/{args.epochs}]: skipping {start_step} steps, starting from step {start_step + 1}')
-            grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retriever, start_step, wandb if args.use_wandb else None, args)
+            grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, ans_model, retriever, start_step, wandb if args.use_wandb else None, args)
         else:
             loader = DataLoader(train_ds, batch_size=args.batch_size, sampler=train_sampler, num_workers=args.num_workers, pin_memory=True, collate_fn=collate_fn)
             Logger(f'Epoch [{epoch + 1}/{args.epochs}]: starting from scratch')
-            grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, retriever, 0, wandb if args.use_wandb else None, args)
+            grpo_train_epoch(epoch, loader, model_engine, tokenizer, ref_model, ans_model, retriever, 0, wandb if args.use_wandb else None, args)
