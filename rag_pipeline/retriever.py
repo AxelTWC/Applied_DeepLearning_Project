@@ -17,6 +17,7 @@ from pyserini.encode import DprQueryEncoder
 from typing import List, Dict, Optional, Tuple
 import numpy as np
 import torch
+import json
 
 class Retriever:
     """Ingest documents, chunk them and provide retrieval by query.
