@@ -17,6 +17,7 @@ def print_history(history: List[Dict]):
         print(f"\n{role.upper()}\n{content}")
         
 def record_step(step: int, model_history: List[Dict], model_response: str, file_path: str):
+    # record the step, model history, and model response
     with open(file_path, 'a') as f:
         if step >= 0:
             f.write(f"\n{">"*10}  STEP {step}  {"<"*10}\n")
@@ -24,7 +25,7 @@ def record_step(step: int, model_history: List[Dict], model_response: str, file_
             f.write(f"\n{">"*10}  FINAL GENERATION  {"<"*10}\n")
         f.write(f"\n----------  MODEL HISTORY. ----------")
         for message in model_history:
-            f.write(f"\n{message['role'].upper()}\n {message['content']}\n")
+            f.write(f"\n{message['role'].upper()}\n{message['content']}\n")
         f.write("\n----------  MODEL RESPONSE. ----------")
         f.write(f"\n{model_response}\n")
         f.write(f"\n{"-"*100}\n")
