@@ -11,6 +11,7 @@ import random
 import numpy as np
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import logging
+import deepspeed
 from torch.utils.data.sampler import Sampler
 
 # Configure logger
@@ -34,7 +35,7 @@ def init_distributed_mode():
         local_rank = int(os.environ['LOCAL_RANK'])
         if torch.cuda.is_available():
             torch.cuda.set_device(local_rank)
-            dist.init_process_group(backend="nccl")
+            deepspeed.init_distributed(dist_backend="nccl")
         else:
             dist.init_process_group(backend="gloo")
 
@@ -59,7 +60,18 @@ def setup_seed(seed: int):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
+def deepspeed_checkpoint(model_name, save_name, model_engine, client_state, save_dir='../checkpoints'):
+    os.makedirs(save_dir, exist_ok=True)
+    # DeepSpeed 保存的是一个目录，而不是单个文件
+    save_path = f"{save_dir}/{save_name}"
     
+    # save_checkpoint 自动处理 ZeRO 分片、优化器状态等
+    # client_state 是一个字典，可以存 step, epoch, wandb_id 等
+    model_engine.save_checkpoint(save_path, client_state=client_state)
+    
+    Logger(f"Checkpoint saved to {save_path}")
+
 def llm_checkpoint(model_name: str, save_name: str = 'full_sft', model=None, optimizer=None, epoch=0, step=0, wandb=None, save_dir='../checkpoints', **kwargs):
     os.makedirs(save_dir, exist_ok=True)
     checkpoint_path = f"{save_dir}/{model_name}_{save_name}.pth"
@@ -69,7 +81,7 @@ def llm_checkpoint(model_name: str, save_name: str = 'full_sft', model=None, opt
         from torch.nn.parallel import DistributedDataParallel
         state_dict = model.module.state_dict() if isinstance(model, DistributedDataParallel) else model.state_dict()
         ckp_tmp = checkpoint_path + '.tmp'
-        torch.save({k: v for k, v in state_dict.items()}, ckp_tmp)
+        torch.save({k: v.half() for k, v in state_dict.items()}, ckp_tmp)
         os.replace(ckp_tmp, checkpoint_path)
         wandb_id = None
         if wandb:
@@ -118,7 +130,8 @@ def init_model(model_name: str, save_name:str, save_dir: str = '../out', device:
             device = 'mps'
         else:
             device = 'cpu'
-    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=dtype, device_map=device)
+    torch_dtype = torch.bfloat16 if dtype == 'bfloat16' else torch.float32
+    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch_dtype, device_map=device)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if save_name is not None:
         weight_path = f'{save_dir}/{model_name}{save_name}.pth'
