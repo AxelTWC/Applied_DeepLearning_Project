@@ -10,10 +10,9 @@ import torch
 import gc
 import re
 import copy
-from typing import List
+from typing import List, Dict, Tuple
 from trainer.trainer_utils import init_distributed_mode, Logger, setup_seed, SkipBatchSampler, is_main_process, deepspeed_checkpoint, setup_logging
 import torch.distributed as dist
-from typing import Dict, Tuple
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
