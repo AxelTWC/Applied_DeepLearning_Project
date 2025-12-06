@@ -4,7 +4,7 @@ import re
 def break_condition(response: str) -> bool:
     """Decide whether to continue based on the router response."""
     decision = response.strip().lower()
-    if "terminate" in decision or not decision:
+    if "<terminate>" == decision or not decision:
         return True
     else:
         # Default to False if unclear
