@@ -63,13 +63,8 @@ def setup_seed(seed: int):
 
 def deepspeed_checkpoint(model_name, save_name, model_engine, client_state, save_dir='../checkpoints'):
     os.makedirs(save_dir, exist_ok=True)
-    # DeepSpeed 保存的是一个目录，而不是单个文件
     save_path = f"{save_dir}/{save_name}"
-    
-    # save_checkpoint 自动处理 ZeRO 分片、优化器状态等
-    # client_state 是一个字典，可以存 step, epoch, wandb_id 等
     model_engine.save_checkpoint(save_path, client_state=client_state)
-    
     Logger(f"Checkpoint saved to {save_path}")
 
 def llm_checkpoint(model_name: str, save_name: str = 'full_sft', model=None, optimizer=None, epoch=0, step=0, wandb=None, save_dir='../checkpoints', **kwargs):
