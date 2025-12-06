@@ -27,6 +27,15 @@ def is_main_process():
 def Logger(content):
     if is_main_process():
         logging.info(content)
+        
+def setup_logging():
+    if dist.is_initialized():
+        rank = dist.get_rank()
+    else:
+        rank = 0
+
+    if rank != 0:
+        logging.getLogger().setLevel(logging.CRITICAL) 
 
 def init_distributed_mode():
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
@@ -61,10 +70,10 @@ def setup_seed(seed: int):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-def deepspeed_checkpoint(model_name, save_name, model_engine, client_state, save_dir='../checkpoints'):
+def deepspeed_checkpoint(model_name, save_name, model_engine, client_state, save_dir='../checkpoints', tag=None):
     os.makedirs(save_dir, exist_ok=True)
     save_path = f"{save_dir}/{save_name}"
-    model_engine.save_checkpoint(save_path, client_state=client_state)
+    model_engine.save_checkpoint(save_path, client_state=client_state, tag=tag)
     Logger(f"Checkpoint saved to {save_path}")
 
 def llm_checkpoint(model_name: str, save_name: str = 'full_sft', model=None, optimizer=None, epoch=0, step=0, wandb=None, save_dir='../checkpoints', **kwargs):
