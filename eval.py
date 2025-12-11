@@ -1,5 +1,4 @@
 import argparse
-import requests
 import json
 import os
 import shutil
@@ -13,9 +12,10 @@ from tqdm import tqdm
 from typing import Union
 from rag_pipeline.rag import AdaptiveRAG
 from rag_pipeline.reranker import BgeReranker, Reranker
+import time
 
 class Config:
-    def __init__(self, model: str, filepath: str, context_num: int, context_free: bool, question_limit: Optional[int] = None, generator: Union[str, Generator] = "http://localhost:8080", reranker: Optional[Reranker] = False):
+    def __init__(self, model: str, filepath: str, context_num: int, context_free: bool, question_limit: Optional[int] = None, generator: Union[str, Generator] = "http://localhost:8080", reranker: Optional[Reranker] = False, router_model: Optional[str] = "http://localhost:8080"):
         self.model = model
         self.filepath = filepath
         self.context_num = context_num
@@ -23,6 +23,7 @@ class Config:
         self.question_limit = question_limit
         self.reranker = reranker
         self.generator = Generator_API(base_url=generator) if isinstance(generator, str) else generator
+        self.router_model = Generator_API(base_url=router_model) if isinstance(router_model, str) else router_model
 
 def get_prompt(question:str) -> List[Dict]:
     messages = [
@@ -34,7 +35,7 @@ def get_prompt(question:str) -> List[Dict]:
 
 def eval(config: Config):
     accuracy = 0
-    print(f"Evaluating {config.model} on {config.filepath} with {0 if config.context_free else config.context_num} context(s)")
+    print(f"Evaluating Standard RAG Baseline with {config.model} on {config.filepath} with {0 if config.context_free else config.context_num} context(s)")
     if config.context_free:
         print("Using context-free mode")
     with open(config.filepath, "r") as f:
@@ -56,15 +57,15 @@ def eval(config: Config):
     print(f"Accuracy: {accuracy/len(data):.4f}")
     return accuracy/len(data)
 
-def eval_RAG(config: Config):
+def eval_RAG(args: argparse.Namespace, config: Config):
     accuracy = 0
-    print(f"Evaluating {config.model} on {config.filepath} {'with reranker' if config.reranker else 'without reranker'} using Adaptive RAG")
+    print(f"Evaluating Adaptive RAG with {config.model} on {config.filepath} {'with reranker' if config.reranker else 'without reranker'}")
     generator = config.generator
     retriever = FaissLocalRetriever(faiss_index_path=f"faiss_store")
     reranker = config.reranker
     dataset_name = config.filepath.split("/")[-1].split(".")[0].split("_")[0]
     eval_results = []
-    base_path = f"data/adaptive/{dataset_name}"
+    base_path = f"{args.output_path}/{dataset_name}"
     if config.reranker:
         base_path += f"/reranker"
     else:
@@ -81,7 +82,7 @@ def eval_RAG(config: Config):
         for i in tqdm(range(len(data)), desc="Evaluating"):
             item = data[i]
             file_path = f"{base_path}/rag_history/question_{i}.txt"
-            router = AdaptiveRouter(generator=generator)
+            router = AdaptiveRouter(generator=config.router_model)
             rag = AdaptiveRAG(generator=generator, router=router, retriever=retriever, reranker=reranker)
             ans = rag.generate(item["question"], top_k=20, max_step=10, file_path=file_path)
             em_value = exact_match(ans["answer"], item["answer"])
@@ -158,63 +159,46 @@ def display(config: Config):
     return accuracy/len(data)
 
 if __name__ == "__main__":
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument("--model", type=str, default="llama3.1-8b-instant")
-    # parser.add_argument("--filepath", type=str, default="data/triviaqa_val_1000_DPR.json", help="The filepath of the dataset")
-    # parser.add_argument("--context_num", type=int, default=5, help="The number of context to use")
-    # parser.add_argument("--context_free", action="store_true", help="Whether to use context-free mode")
-    # args = parser.parse_args()
-    # eval(args)
+    
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--weights_path", type=str, default="out/RAG_lora_adapter", help="The path to the weights")
+    parser.add_argument("--no_adaptive", action="store_true", help="Whether to evaluate without Adaptive RAG")
+    parser.add_argument("--output_path", type=str, default="data/adaptive-7B-LoRA", help="The path to save the results")
+    args = parser.parse_args()
     
     # Example configurations for evaluation
-    model = "Qwen/Qwen2.5-7B-Instruct"
-    base_url = "http://localhost:8080"
-    generator = Generator(model_name=model)
-    nq_configs = [
-        Config(model=model, filepath="data/nq_val_1000_DPR.json", context_num=0, context_free=True, question_limit=10, generator=base_url),
-        Config(model=model, filepath="data/nq_val_1000_DPR.json", context_num=1, context_free=False, generator=base_url),
-        Config(model=model, filepath="data/nq_val_1000_DPR.json", context_num=3, context_free=False, generator=base_url),
-        Config(model=model, filepath="data/nq_val_1000_DPR.json", context_num=5, context_free=False, generator=base_url),
-    ]
-    triviaqa_configs = [
-        Config(model=model, filepath="data/triviaqa_val_1000_DPR.json", context_num=0, context_free=True, question_limit=1000, generator=base_url),
-        Config(model=model, filepath="data/triviaqa_val_1000_DPR.json", context_num=1, context_free=False, question_limit=1000, generator=base_url),
-        Config(model=model, filepath="data/triviaqa_val_1000_DPR.json", context_num=3, context_free=False, question_limit=1000, generator=base_url),
-        Config(model=model, filepath="data/triviaqa_val_1000_DPR.json", context_num=5, context_free=False, question_limit=1000, generator=base_url),
-    ]
-    # for config in nq_configs:
-    #     eval(config)
-    
-    # Evaluate context retrieval accuracy
-    # eval_context(Config(model=model, filepath="data/nq_val_4289_DPR.json", context_num=1, context_free=False, base_url=base_url))
-    # eval_context(Config(model=model, filepath="data/preprocessed/triviaqa_validation_1000_BM25_bgeReranker.json", context_num=20, context_free=False, base_url=base_url))
-    
-    # config with reranker
-    test_triviaqa = Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/preprocessed/triviaqa_validation_1000_BM25_bgeReranker.json", context_num=1, context_free=False, question_limit=1000, generator=base_url)
-    test_nq_bm25 = Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/preprocessed/nq_validation_1000_BM25_bgeReranker.json", context_num=1, context_free=False, question_limit=1000, generator=base_url)
-    test_nq_dpr = Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/nq_val_1000_DPR.json", context_num=1, context_free=False, question_limit=10, generator=base_url)
-    test_triviqa_bge_reranker = Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/preprocessed/triviaqa_validation_1000_BgeM3Faiss_bgeReranker.json", context_num=3, context_free=False, question_limit=1000, generator=base_url)
-    test_nq_bge_reranker = Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/preprocessed/nq_validation_1000_BgeM3Faiss_bgeReranker.json", context_num=3, context_free=False, question_limit=1000, generator=base_url)
-    
-    # config without reranker
-    test_triviqa_bge = Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/preprocessed/triviaqa_validation_1000_BgeM3Faiss.json", context_num=1, context_free=False, question_limit=10, generator=base_url)
-    test_nq_bge = Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/preprocessed/nq_validation_1000_BgeM3Faiss.json", context_num=1, context_free=False, question_limit=1000, generator=base_url)
+    base_model = "Qwen/Qwen2.5-7B-Instruct"
+    router_model = Generator(model_name=base_model, weight_path=args.weights_path)
+    generator = router_model
 
-    # display(test_nq_bm25)
-    # display(test_triviqa_bge)
-    # eval(test_triviqa_bge)
-    # eval(test_nq_bge)
-    # eval(test_triviqa_bge_reranker)
-    # eval(test_nq_bge_reranker)
+    # Evaluate BGE-M3 Standard RAG baseline
+    standard_triviqa_bge = Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/triviaqa_validation_1000_BgeM3Faiss.json", context_num=1, context_free=False, question_limit=1000, generator=generator, router_model=router_model)
+    standard_nq_bge = Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/nq_validation_1000_BgeM3Faiss.json", context_num=1, context_free=False, question_limit=1000, generator=generator, router_model=router_model)
+
+    standard_triviqa_bm25 = Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/preprocessed/triviaqa_validation_1000_BM25.json", context_num=1, context_free=False, question_limit=1000, generator=generator, router_model=router_model)
+    standard_nq_bm25 = Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/preprocessed/nq_validation_1000_BM25.json", context_num=1, context_free=False, question_limit=1000, generator=generator, router_model=router_model)
+
+
+    question_limit = 1000
+    iterative_configs = [
+        Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/triviaqa_validation_1000_BgeM3Faiss.json", context_num=1, context_free=False, question_limit=question_limit, reranker=None, generator=generator, router_model=router_model),
+        Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/nq_validation_1000_BgeM3Faiss.json", context_num=1, context_free=False, question_limit=question_limit, reranker=None, generator=generator, router_model=router_model),
+    ]
 
     # eval iterative
-    question_limit = 10
-    reranker = BgeReranker()
-    iterative_configs = [
-        Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/preprocessed/triviaqa_validation_1000_BgeM3Faiss.json", context_num=1, context_free=False, question_limit=question_limit, reranker=None, generator=base_url),
-        Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/preprocessed/nq_validation_1000_BgeM3Faiss.json", context_num=1, context_free=False, question_limit=question_limit, reranker=None, generator=base_url),
-        Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/preprocessed/triviaqa_validation_1000_BgeM3Faiss.json", context_num=1, context_free=False, question_limit=question_limit, reranker=reranker, generator=base_url),
-        Config(model="Qwen/Qwen2.5-7B-Instruct", filepath="data/preprocessed/nq_validation_1000_BgeM3Faiss.json", context_num=1, context_free=False, question_limit=question_limit, reranker=reranker, generator=base_url),
-    ]
-    for idx, config in enumerate(iterative_configs):
-        eval_RAG(config)
+    if args.no_adaptive:
+        print("Adaptive RAG Evaluation is disabled")
+    else:
+        print("Evaluating Standard RAG Baseline")
+        for idx, config in enumerate(iterative_configs):
+            start_time = time.time()
+            eval_RAG(args, config)
+            end_time = time.time()
+            # convert time into hours, minutes, and seconds
+            hours = int(end_time - start_time) // 3600
+            minutes = int(end_time - start_time) % 3600 // 60
+            seconds = int(end_time - start_time) % 60
+            print(f"Time taken: {hours} hours, {minutes} minutes, {seconds} seconds")
+            
+    eval(standard_triviqa_bm25)
+    eval(standard_nq_bm25)
