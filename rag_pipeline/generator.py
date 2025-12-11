@@ -2,10 +2,12 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 import time
 from typing import List, Dict, Union
 import torch
+from peft import PeftModel
+
 
 class Generator:
     
-    def __init__(self, model_name: str = "Qwen/Qwen2.5-7B-Instruct"):
+    def __init__(self, model_name: str = "Qwen/Qwen2.5-7B-Instruct", weight_path: str = None):
         self.model_name = model_name
         if torch.cuda.is_available():
             self.device = "cuda"
@@ -13,14 +15,24 @@ class Generator:
             self.device = "mps"
         else:
             self.device = "cpu"
+        self.system_prompt = "You are a helpful assistant."
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype="auto",
+            trust_remote_code=True,
             device_map=self.device
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.system_prompt = "You are a helpful assistant."
-
+        if weight_path is not None:
+            self.model = PeftModel.from_pretrained(self.model, weight_path)
+            self.model.to(self.device)
+            self.model.eval()
+            has_adapter = isinstance(self.model, PeftModel) and len(getattr(self.model, "peft_config", {})) > 0
+            if not has_adapter:
+                assert False, "No adapter found"
+            else:
+                print(f"Loaded weights from {weight_path} to {self.model_name}")
+                
     def generate(self, messages: Union[str, List[Dict]], temperature: float = 1.0, top_p: float = 0.9, top_k: int = 40, max_new_tokens: int = 512) -> str:
         if isinstance(messages, str):
             messages = [
