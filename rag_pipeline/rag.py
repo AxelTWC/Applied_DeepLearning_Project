@@ -12,6 +12,7 @@ from rag_pipeline.router import Router
 from rag_pipeline.prompt import ADAPTIVE_GENERATOR_SYSTEM_PROMPT, ADAPTIVE_GENERATOR_QUERY_PROMPT
 from rag_pipeline.utils import break_condition, record_step, extract_subtopics
 import os
+from peft import PeftModel
 def default_local_llm(prompt: str) -> str:
     """A very small default 'LLM' that echoes the context and query.
 
@@ -70,12 +71,15 @@ class AdaptiveRAG(RAG):
         answer = ""
         references = ""
         all_contexts = []
+        context_set = set()
         if file_path:
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
         if os.path.exists(file_path):
                 os.remove(file_path)
         while (current_step < max_step):
             current_step += 1
+            if references == "" and current_step > 1:
+                references = "The retrieved contexts from current step are identical to the retrieved contexts from the previous steps."
             response = self.router.route(query, references=references)
             if file_path:
                 record_step(current_step, self.router.history, response, file_path)
@@ -89,6 +93,9 @@ class AdaptiveRAG(RAG):
                 contexts, scores = retrieval_contexts[f"{query}_subq_{subquestions.index(subq)}"]
                 if self.reranker:
                     contexts, scores = self.reranker.rerank(subq, contexts)
+                if contexts[0] in context_set:
+                    continue
+                context_set.add(contexts[0])
                 all_contexts.append({
                     "subquestion": subq,
                     "contexts": contexts,
@@ -102,7 +109,15 @@ class AdaptiveRAG(RAG):
             {"role": "system", "content": ADAPTIVE_GENERATOR_SYSTEM_PROMPT},
             {"role": "user", "content": ADAPTIVE_GENERATOR_QUERY_PROMPT.format(query=query, references=references)}
         ]
-        answer = self.generator.generate(generator_messages)
+        model = self.generator.model
+        has_adapter = isinstance(model, PeftModel) and len(getattr(model, "peft_config", {})) > 0
+
+        if has_adapter:
+            with model.disable_adapter():
+                answer = self.generator.generate(generator_messages)
+        else:
+            answer = self.generator.generate(generator_messages)
+
         if file_path:
             record_step(-1, generator_messages, answer, file_path)
         return {"query": query, "answer": answer, "contexts": all_contexts, "steps": current_step}
