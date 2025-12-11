@@ -74,7 +74,7 @@ def deepspeed_checkpoint(model_name, save_name, model_engine, client_state, save
     os.makedirs(save_dir, exist_ok=True)
     save_path = f"{save_dir}/{save_name}"
     model_engine.save_checkpoint(save_path, client_state=client_state, tag=tag)
-    Logger(f"Checkpoint saved to {save_path}")
+    Logger(f"Checkpoint saved to {save_path}{f'with tag {tag}' if tag else ''}")
 
 def llm_checkpoint(model_name: str, save_name: str = 'full_sft', model=None, optimizer=None, epoch=0, step=0, wandb=None, save_dir='../checkpoints', **kwargs):
     os.makedirs(save_dir, exist_ok=True)
