@@ -237,4 +237,4 @@
   - See `docs/RAG_small_gpu_instructions.md` for safe instructions on attempting a real-model
     run on GPUs with limited VRAM (for example, RTX 3080 mobile with ~8GB). The demo defaults
     to deterministic fallback embeddings to avoid heavy memory use.
-  - The code is implemented with the  help of Gemini 3 Pro
+  - The code is implemented with the help of Gemini 3 Pro for debugging purpose
