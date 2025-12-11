@@ -35,5 +35,6 @@ data/rag_history/*
 data/adaptive*/
 wandb/
 env.py
-*.jsonl
 out/
+data/adaptive*/
+*.jsonl
